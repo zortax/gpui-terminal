@@ -337,6 +337,7 @@
 //! Use a monospace font. Nerd fonts work well with `line_height_multiplier: 1.0`
 //! to accommodate tall glyphs.
 
+pub mod box_drawing;
 pub mod clipboard;
 pub mod colors;
 pub mod event;

@@ -60,6 +60,7 @@
 //! );
 //! ```
 
+use crate::box_drawing;
 use crate::colors::ColorPalette;
 use crate::event::GpuiEventProxy;
 use alacritty_terminal::grid::Dimensions;
@@ -534,21 +535,130 @@ impl TerminalRenderer {
             let base_height = self.cell_height / self.line_height_multiplier;
             let vertical_offset = (self.cell_height - base_height) / 2.0;
 
-            // Paint each character individually at exact cell positions
-            // This ensures perfect alignment for terminal emulation
-            for (col_idx, cell) in cells {
+            let y_base = origin.y + self.cell_height * (line_idx as f32);
+            let cy = y_base + self.cell_height / 2.0;
+
+            // Use cells vec for multiple passes (already collected above)
+            let cells_vec = &cells;
+
+            // First pass: find and draw horizontal spans of box-drawing characters
+            // This draws continuous lines across multiple cells to avoid gaps
+            let mut processed_horizontal: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+            let mut i = 0;
+            while i < cells_vec.len() {
+                let (col_idx, ref cell) = cells_vec[i];
                 let ch = cell.c;
 
-                // Skip empty cells (space or null)
+                // Check if this starts a horizontal span
+                if let Some(weight) = box_drawing::get_horizontal_weight(ch) {
+                    let fg_color = self.palette.resolve(cell.fg, colors);
+                    let start_col = col_idx;
+                    let mut end_col = col_idx;
+
+                    // Look ahead for consecutive cells with same horizontal weight
+                    let mut j = i + 1;
+                    while j < cells_vec.len() {
+                        let (next_col, ref next_cell) = cells_vec[j];
+                        // Must be adjacent
+                        if next_col != end_col + 1 {
+                            break;
+                        }
+                        // Must have same horizontal weight and same color
+                        let next_fg = self.palette.resolve(next_cell.fg, colors);
+                        if box_drawing::get_horizontal_weight(next_cell.c) == Some(weight)
+                            && next_fg == fg_color
+                        {
+                            end_col = next_col;
+                            j += 1;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Draw the horizontal span
+                    let start_x = origin.x + self.cell_width * (start_col as f32);
+                    let end_x = origin.x + self.cell_width * ((end_col + 1) as f32);
+
+                    box_drawing::draw_horizontal_span(
+                        start_x,
+                        end_x,
+                        cy,
+                        weight,
+                        self.cell_width,
+                        fg_color,
+                        window,
+                    );
+
+                    // Mark these columns as having horizontal drawn
+                    for col in start_col..=end_col {
+                        processed_horizontal.insert(col);
+                    }
+
+                    // Skip past this span
+                    i = j;
+                    continue;
+                }
+                i += 1;
+            }
+
+            // Second pass: draw vertical components and non-horizontal box chars
+            for (col_idx, cell) in cells_vec.iter() {
+                let ch = cell.c;
+
                 if ch == ' ' || ch == '\0' {
                     continue;
                 }
 
-                let x = origin.x + self.cell_width * (col_idx as f32);
-                let y = origin.y + self.cell_height * (line_idx as f32) + vertical_offset;
-
-                // Get cell colors
+                let x = origin.x + self.cell_width * (*col_idx as f32);
                 let fg_color = self.palette.resolve(cell.fg, colors);
+
+                if box_drawing::is_box_drawing_char(ch) {
+                    let cell_bounds = Bounds {
+                        origin: Point { x, y: y_base },
+                        size: Size {
+                            width: self.cell_width,
+                            height: self.cell_height,
+                        },
+                    };
+
+                    if processed_horizontal.contains(col_idx) {
+                        // Horizontal already drawn, just draw vertical components
+                        box_drawing::draw_vertical_components(
+                            ch,
+                            cell_bounds,
+                            fg_color,
+                            self.cell_width,
+                            window,
+                        );
+                    } else {
+                        // Not part of a horizontal span, draw the whole character
+                        box_drawing::draw_box_character(
+                            ch,
+                            cell_bounds,
+                            fg_color,
+                            self.cell_width,
+                            window,
+                        );
+                    }
+                    continue;
+                }
+            }
+
+            // Third pass: draw regular text characters
+            for (col_idx, cell) in cells_vec.iter() {
+                let ch = cell.c;
+
+                // Skip empty cells and box-drawing (already handled)
+                if ch == ' ' || ch == '\0' || box_drawing::is_box_drawing_char(ch) {
+                    continue;
+                }
+
+                let x = origin.x + self.cell_width * (*col_idx as f32);
+                let fg_color = self.palette.resolve(cell.fg, colors);
+
+                // For regular text, apply vertical offset for centering
+                let y = y_base + vertical_offset;
 
                 // Get cell flags for styling
                 let flags = cell.flags;
