@@ -133,7 +133,7 @@ fn main() -> Result<()> {
                 cols: 80,
                 rows: 24,
                 scrollback: 10000,
-                line_height_multiplier: 1.05,
+                line_height_multiplier: 1.0,
                 padding: Edges::all(px(8.0)),
                 colors,
             };

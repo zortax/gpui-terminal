@@ -72,7 +72,7 @@ use std::thread;
 /// | `font_family` | "monospace" |
 /// | `font_size` | 14px |
 /// | `scrollback` | 10000 |
-/// | `line_height_multiplier` | 1.2 |
+/// | `line_height_multiplier` | 1.0 |
 /// | `padding` | 0px all sides |
 /// | `colors` | Default palette |
 ///
@@ -88,7 +88,7 @@ use std::thread;
 ///     font_family: "JetBrains Mono".into(),
 ///     font_size: px(13.0),
 ///     scrollback: 50000,
-///     line_height_multiplier: 1.1,
+///     line_height_multiplier: 1.0,
 ///     padding: Edges::all(px(10.0)),
 ///     colors: ColorPalette::builder()
 ///         .background(0x1a, 0x1a, 0x1a)
@@ -127,7 +127,7 @@ pub struct TerminalConfig {
     pub scrollback: usize,
 
     /// Multiplier for line height to accommodate tall glyphs (e.g., nerd fonts)
-    /// Default is 1.2 (20% extra height)
+    /// Default is 1.0 (no extra height)
     pub line_height_multiplier: f32,
 
     /// Padding around the terminal content (top, right, bottom, left)
@@ -147,7 +147,7 @@ impl Default for TerminalConfig {
             font_family: "monospace".into(),
             font_size: px(14.0),
             scrollback: 10000,
-            line_height_multiplier: 1.2,
+            line_height_multiplier: 1.0,
             padding: Edges::all(px(0.0)),
             colors: ColorPalette::default(),
         }

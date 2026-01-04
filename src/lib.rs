@@ -63,7 +63,7 @@
 //!             cols: 80,
 //!             rows: 24,
 //!             scrollback: 10000,
-//!             line_height_multiplier: 1.2,
+//!             line_height_multiplier: 1.0,
 //!             padding: Edges::all(px(8.0)),
 //!             colors: ColorPalette::default(),
 //!         };
@@ -154,7 +154,7 @@
 //!     font_size: px(13.0),
 //!
 //!     // Line height multiplier for tall glyphs (nerd fonts)
-//!     line_height_multiplier: 1.2,
+//!     line_height_multiplier: 1.0,
 //!
 //!     // Scrollback history (lines)
 //!     scrollback: 10000,
@@ -334,7 +334,7 @@
 //!
 //! ### Font doesn't render correctly
 //!
-//! Use a monospace font. Nerd fonts work well with `line_height_multiplier: 1.2`
+//! Use a monospace font. Nerd fonts work well with `line_height_multiplier: 1.0`
 //! to accommodate tall glyphs.
 
 pub mod clipboard;

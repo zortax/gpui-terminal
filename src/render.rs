@@ -32,18 +32,19 @@
 //! 3. **Default Background Skip**: Cells with the default background color don't
 //!    generate separate background rectangles.
 //!
-//! 4. **Cell Measurement**: Font metrics are measured once using the 'M' character
-//!    and cached for consistent cell dimensions.
+//! 4. **Cell Measurement**: Font metrics are measured once using the '│' (BOX DRAWINGS
+//!    LIGHT VERTICAL) character and cached for consistent cell dimensions.
 //!
 //! # Cell Dimensions
 //!
-//! Cell size is calculated from actual font metrics:
+//! Cell size is calculated from actual font metrics using the '│' character,
+//! which spans the full cell height in properly designed terminal fonts:
 //!
-//! - **Width**: Measured from shaped 'M' character (typically widest in monospace)
+//! - **Width**: Measured from shaped '│' character
 //! - **Height**: `(ascent + descent) × line_height_multiplier`
 //!
-//! The `line_height_multiplier` (default 1.2) adds extra vertical space to
-//! accommodate tall glyphs from nerd fonts and other icon fonts.
+//! The `line_height_multiplier` (default 1.0) can be adjusted to add extra
+//! vertical space if needed for specific fonts.
 //!
 //! # Example
 //!
@@ -54,7 +55,7 @@
 //! let renderer = TerminalRenderer::new(
 //!     "JetBrains Mono".to_string(),
 //!     px(14.0),
-//!     1.2,  // line height multiplier
+//!     1.0,  // line height multiplier
 //!     ColorPalette::default(),
 //! );
 //! ```
@@ -206,7 +207,7 @@ impl TerminalRenderer {
     /// use gpui_terminal::render::TerminalRenderer;
     /// use gpui_terminal::ColorPalette;
     ///
-    /// let renderer = TerminalRenderer::new("Fira Code".to_string(), px(14.0), 1.2, ColorPalette::default());
+    /// let renderer = TerminalRenderer::new("Fira Code".to_string(), px(14.0), 1.0, ColorPalette::default());
     /// ```
     pub fn new(
         font_family: String,
@@ -232,13 +233,16 @@ impl TerminalRenderer {
     /// Measure cell dimensions based on actual font metrics.
     ///
     /// This method measures the actual width and height of characters
-    /// using the GPUI text system.
+    /// using the GPUI text system. It uses the '│' (BOX DRAWINGS LIGHT VERTICAL)
+    /// character which spans the full cell height in properly designed terminal fonts.
     ///
     /// # Arguments
     ///
     /// * `window` - The GPUI window for text system access
     pub fn measure_cell(&mut self, window: &mut Window) {
-        // Measure using a reference character (M is typically the widest)
+        // Measure using '│' (U+2502, BOX DRAWINGS LIGHT VERTICAL)
+        // This character spans the full cell height in terminal fonts, making it
+        // ideal for measuring exact cell dimensions used by TUIs
         let font = Font {
             family: self.font_family.clone().into(),
             features: FontFeatures::default(),
@@ -248,7 +252,7 @@ impl TerminalRenderer {
         };
 
         let text_run = TextRun {
-            len: 1,
+            len: "│".len(),
             font,
             color: gpui::black(),
             background_color: None,
@@ -256,18 +260,18 @@ impl TerminalRenderer {
             strikethrough: None,
         };
 
-        // Shape a single 'M' character to get its metrics
+        // Shape the box-drawing character to get cell metrics
         let shaped = window
             .text_system()
-            .shape_line("M".into(), self.font_size, &[text_run], None);
+            .shape_line("│".into(), self.font_size, &[text_run], None);
 
-        // Get the width from the shaped line (accessed via Deref to LineLayout)
+        // Get the width from the shaped line
         if shaped.width > px(0.0) {
             self.cell_width = shaped.width;
         }
 
-        // Calculate height from ascent + descent with multiplier for tall glyphs (nerd fonts, etc.)
-        let line_height = shaped.ascent + shaped.descent;
+        // Calculate height from ascent + descent with optional multiplier
+        let line_height = (shaped.ascent + shaped.descent).ceil();
         if line_height > px(0.0) {
             self.cell_height = line_height * self.line_height_multiplier;
         }
@@ -641,12 +645,12 @@ mod tests {
         let renderer = TerminalRenderer::new(
             "Fira Code".to_string(),
             px(14.0),
-            1.2,
+            1.0,
             ColorPalette::default(),
         );
         assert_eq!(renderer.font_family, "Fira Code");
         assert_eq!(renderer.font_size, px(14.0));
-        assert_eq!(renderer.line_height_multiplier, 1.2);
+        assert_eq!(renderer.line_height_multiplier, 1.0);
     }
 
     #[test]
@@ -684,7 +688,7 @@ mod tests {
         let renderer = TerminalRenderer::new(
             "monospace".to_string(),
             px(14.0),
-            1.2,
+            1.0,
             ColorPalette::default(),
         );
         let black = Hsla::black();
