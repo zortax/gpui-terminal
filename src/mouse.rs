@@ -350,8 +350,14 @@ pub fn scroll_report(
         let row = point.line.0 + 1;
 
         // Mouse wheel events are always "pressed" (M), never released
-        let sequence = format!("\x1b[<{};{};{}M", button_value, col, row);
-        return Some(sequence.into_bytes());
+        // Send one event per line scrolled (this is how real terminals work)
+        let single_event = format!("\x1b[<{};{};{}M", button_value, col, row);
+        let count = delta.unsigned_abs().min(10) as usize; // Limit to 10 events max
+        let mut result = Vec::with_capacity(single_event.len() * count);
+        for _ in 0..count {
+            result.extend_from_slice(single_event.as_bytes());
+        }
+        return Some(result);
     }
 
     // If in alternate screen mode but no mouse reporting, send arrow keys
