@@ -779,16 +779,66 @@ impl TerminalView {
 
     /// Handle scroll events.
     ///
-    /// Currently a placeholder for future scrollback support.
+    /// Scrolls the terminal display through the scrollback buffer when
+    /// not in alternate screen mode. In alternate screen mode (used by
+    /// applications like vim, less, etc.), scroll events are converted
+    /// to arrow key sequences.
     fn on_scroll(
         &mut self,
-        _event: &ScrollWheelEvent,
+        event: &ScrollWheelEvent,
         _window: &mut Window,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
-        // TODO: Implement scrollback
-        // - Scroll the terminal display up/down
-        // - Send scroll reports if alternate screen is not active
+        use alacritty_terminal::grid::Scroll;
+        use crate::mouse::{pixels_to_scroll_lines, scroll_report};
+
+        // Calculate number of lines to scroll
+        // Note: We negate the delta because:
+        // - On macOS with natural scrolling, swipe up gives negative y delta
+        // - But swipe up should show OLDER content (positive scroll offset)
+        // - For scroll_display, positive delta scrolls toward history (older content)
+        let pixel_delta = event.delta.pixel_delta(px(20.0)).y;
+        let lines = -pixels_to_scroll_lines(pixel_delta, self.renderer.cell_height);
+
+        if lines == 0 {
+            return;
+        }
+
+        // Get terminal mode to check if we're in alternate screen
+        let mode = self.state.mode();
+
+        // Shift+Scroll always scrolls the scrollback buffer, bypassing application mouse mode
+        // This is standard behavior in terminals like iTerm2 and Alacritty
+        let force_scrollback = event.modifiers.shift;
+
+        // Check if we should send scroll report to the application
+        // (alternate screen or mouse tracking enabled, unless Shift is held)
+        if !force_scrollback {
+            // Convert mouse position to terminal cell coordinates
+            let mouse_pos = event.position;
+            let cell_col: f32 = (mouse_pos.x / self.renderer.cell_width).into();
+            let cell_row: f32 = (mouse_pos.y / self.renderer.cell_height).into();
+            let point = alacritty_terminal::index::Point::new(
+                alacritty_terminal::index::Line(cell_row.max(0.0) as i32),
+                alacritty_terminal::index::Column(cell_col.max(0.0) as usize),
+            );
+
+            if let Some(bytes) = scroll_report(lines, point, 0, mode) {
+                // Send scroll as key sequences to the application
+                let mut writer = self.stdin_writer.lock();
+                let _ = writer.write_all(&bytes);
+                let _ = writer.flush();
+                cx.notify();
+                return;
+            }
+        }
+
+        // Scroll through scrollback buffer (normal mode, or Shift+Scroll override)
+        let term_arc = self.state.term_arc();
+        let mut term = term_arc.lock();
+        term.scroll_display(Scroll::Delta(lines));
+
+        cx.notify();
     }
 
     /// Process pending terminal events.

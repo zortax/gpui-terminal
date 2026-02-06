@@ -486,15 +486,21 @@ impl TerminalRenderer {
             y: bounds.origin.y + padding.top,
         };
 
-        // Iterate over visible lines
+        // Get display offset for scrollback support
+        // When display_offset > 0, we're viewing history (scrolled up)
+        let display_offset = grid.display_offset();
+
+        // Iterate over visible lines (viewport coordinates)
         for line_idx in 0..num_lines {
-            let line = Line(line_idx as i32);
+            // Convert viewport line to terminal line (accounting for scroll offset)
+            // viewport line 0 -> terminal Line(-display_offset) when scrolled
+            let term_line = Line(line_idx as i32) - display_offset;
 
             // Collect cells for this line
             let cells: Vec<(usize, Cell)> = (0..num_cols)
                 .map(|col_idx| {
                     let col = Column(col_idx);
-                    let point = AlacPoint::new(line, col);
+                    let point = AlacPoint::new(term_line, col);
                     let cell = grid[point].clone();
                     (col_idx, cell)
                 })
@@ -714,35 +720,45 @@ impl TerminalRenderer {
             }
         }
 
-        // Paint cursor
+        // Paint cursor only when visible (not scrolled into history)
+        // The cursor is at grid.cursor.point, which is in terminal coordinates
+        // When display_offset > 0, the cursor may be below the visible viewport
         let cursor_point = grid.cursor.point;
-        let cursor_x = origin.x + self.cell_width * (cursor_point.column.0 as f32);
-        let cursor_y = origin.y + self.cell_height * (cursor_point.line.0 as f32);
 
-        let cursor_color = self.palette.resolve(
-            Color::Named(alacritty_terminal::vte::ansi::NamedColor::Cursor),
-            colors,
-        );
+        // Convert cursor's terminal line to viewport line
+        // cursor at Line(n) with display_offset d -> viewport line (n + d)
+        let cursor_viewport_line = cursor_point.line.0 as i32 + display_offset as i32;
 
-        let cursor_bounds = Bounds {
-            origin: Point {
-                x: cursor_x,
-                y: cursor_y,
-            },
-            size: Size {
-                width: self.cell_width,
-                height: self.cell_height,
-            },
-        };
+        // Only paint cursor if it's within the visible viewport
+        if cursor_viewport_line >= 0 && cursor_viewport_line < num_lines as i32 {
+            let cursor_x = origin.x + self.cell_width * (cursor_point.column.0 as f32);
+            let cursor_y = origin.y + self.cell_height * (cursor_viewport_line as f32);
 
-        window.paint_quad(quad(
-            cursor_bounds,
-            px(0.0),
-            cursor_color,
-            Edges::<Pixels>::default(),
-            transparent_black(),
-            Default::default(),
-        ));
+            let cursor_color = self.palette.resolve(
+                Color::Named(alacritty_terminal::vte::ansi::NamedColor::Cursor),
+                colors,
+            );
+
+            let cursor_bounds = Bounds {
+                origin: Point {
+                    x: cursor_x,
+                    y: cursor_y,
+                },
+                size: Size {
+                    width: self.cell_width,
+                    height: self.cell_height,
+                },
+            };
+
+            window.paint_quad(quad(
+                cursor_bounds,
+                px(0.0),
+                cursor_color,
+                Edges::<Pixels>::default(),
+                transparent_black(),
+                Default::default(),
+            ));
+        }
     }
 }
 
