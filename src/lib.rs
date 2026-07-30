@@ -132,7 +132,11 @@
 //!    by the [`input`] module and written directly to the PTY stdin.
 //!
 //! 3. **Rendering**: On each paint, [`TerminalRenderer`] reads the terminal grid,
-//!    batches cells with identical styling, and draws backgrounds, text, and cursor.
+//!    batches cells with identical styling into runs, shapes each run once via
+//!    `shape_line(..., force_width=Some(cell_width))` so every glyph in a
+//!    monospace run is clamped to the cell grid (this is what makes Unicode
+//!    box-drawing characters connect cleanly across cells), and draws
+//!    backgrounds, text, and cursor. See the [`render`] module docs for details.
 //!
 //! ## Configuration
 //!
@@ -337,7 +341,6 @@
 //! Use a monospace font. Nerd fonts work well with `line_height_multiplier: 1.0`
 //! to accommodate tall glyphs.
 
-pub mod box_drawing;
 pub mod clipboard;
 pub mod colors;
 pub mod event;
