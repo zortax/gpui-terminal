@@ -62,10 +62,7 @@
 
 use crate::box_drawing;
 use crate::colors::ColorPalette;
-use crate::event::GpuiEventProxy;
-use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::{Column, Line, Point as AlacPoint};
-use alacritty_terminal::term::Term;
+use crate::grid::GridSource;
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::vte::ansi::Color;
@@ -447,22 +444,21 @@ impl TerminalRenderer {
     ///
     /// * `bounds` - The bounding box to render within
     /// * `padding` - Padding around the terminal content
-    /// * `term` - The terminal state
+    /// * `grid` - The cells to draw: a [`Term`](alacritty_terminal::term::Term),
+    ///   or any other [`GridSource`]
     /// * `window` - The GPUI window
     /// * `cx` - The application context
     pub fn paint(
         &self,
         bounds: Bounds<Pixels>,
         padding: Edges<Pixels>,
-        term: &Term<GpuiEventProxy>,
+        grid: &impl GridSource,
         window: &mut Window,
         _cx: &mut App,
     ) {
-        // Get terminal dimensions
-        let grid = term.grid();
         let num_lines = grid.screen_lines();
         let num_cols = grid.columns();
-        let colors = term.colors();
+        let colors = grid.colors();
 
         // Calculate default background color
         let default_bg = self.palette.resolve(
@@ -488,16 +484,9 @@ impl TerminalRenderer {
 
         // Iterate over visible lines
         for line_idx in 0..num_lines {
-            let line = Line(line_idx as i32);
-
             // Collect cells for this line
             let cells: Vec<(usize, Cell)> = (0..num_cols)
-                .map(|col_idx| {
-                    let col = Column(col_idx);
-                    let point = AlacPoint::new(line, col);
-                    let cell = grid[point].clone();
-                    (col_idx, cell)
-                })
+                .map(|col_idx| (col_idx, grid.cell(line_idx, col_idx)))
                 .collect();
 
             // Layout the row for backgrounds
@@ -715,9 +704,11 @@ impl TerminalRenderer {
         }
 
         // Paint cursor
-        let cursor_point = grid.cursor.point;
-        let cursor_x = origin.x + self.cell_width * (cursor_point.column.0 as f32);
-        let cursor_y = origin.y + self.cell_height * (cursor_point.line.0 as f32);
+        let Some((cursor_line, cursor_column)) = grid.cursor() else {
+            return;
+        };
+        let cursor_x = origin.x + self.cell_width * (cursor_column as f32);
+        let cursor_y = origin.y + self.cell_height * (cursor_line as f32);
 
         let cursor_color = self.palette.resolve(
             Color::Named(alacritty_terminal::vte::ansi::NamedColor::Cursor),

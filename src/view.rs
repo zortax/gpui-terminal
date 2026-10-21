@@ -990,7 +990,7 @@ impl Render for TerminalView {
                         }
 
                         // Paint the terminal with measured dimensions
-                        measured_renderer.paint(bounds, padding, &term, window, cx);
+                        measured_renderer.paint(bounds, padding, &*term, window, cx);
                     },
                 )
                 .size_full(),
